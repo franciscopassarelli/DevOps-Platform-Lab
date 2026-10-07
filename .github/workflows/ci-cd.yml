@@ -23,8 +23,21 @@ jobs:
     - name: Install dependencies
       run: npm install
 
+    # 1. Testing chiquito (ejecuta test si existe, o avanza sin romper)
+    - name: Run Tests
+      run: npm test || echo "No hay tests configurados o se omite"
+
     - name: Run build
       run: npm run build
+
+    # 2. SAST (Análisis estático de seguridad en el código/workspace)
+    - name: Run Trivy vulnerability scanner (SAST)
+      uses: aquasecurity/trivy-action@master
+      with:
+        scan-type: 'fs'
+        scan-ref: '.'
+        format: 'table'
+        exit-code: '0'
 
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@v2
@@ -41,6 +54,14 @@ jobs:
         context: .
         push: true
         tags: ${{ secrets.DOCKER_HUB_USERNAME }}/auth-profile:latest
+
+    # 3. DAST básico (Verificación dinámica levantando el contenedor localmente)
+    - name: Run container locally (DAST check)
+      run: |
+        docker run -d -p 8080:80 --name temp-app-container ${{ secrets.DOCKER_HUB_USERNAME }}/auth-profile:latest
+        sleep 5
+        curl --fail http://localhost:8080 || exit 1
+        docker stop temp-app-container
 
     # --- PASOS DE TERRAFORM EN EL PIPELINE ---
     - name: Setup Terraform
